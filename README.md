@@ -8,3 +8,5 @@
 
 ### File Operations
 - `read_note` — Get note content
+- `write_note` — Write a note
+- `modify_note` — Update a note

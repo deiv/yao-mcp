@@ -26,6 +26,14 @@ impl Vault {
         self.read_file(path.as_ref()).await
     }
 
+    pub async fn write_note(&self, path: &str, content: &str) -> Result<(), VaultError> {
+        self.write_file(path.as_ref(), content).await
+    }
+
+    pub async fn modify_note(&self, path: &str, content: &str) -> Result<(), VaultError> {
+        self.write_file(path.as_ref(), content).await
+    }
+
     async fn read_file(&self, path: &Path) -> Result<String, VaultError> {
         let resolved_file_path = self.resolve_path_from_vault_root(path)?;
         let content = tokio::fs::read_to_string(&resolved_file_path)
@@ -33,6 +41,16 @@ impl Vault {
             .map_err(VaultError::io)?;
 
         Ok(content)
+    }
+
+    async fn write_file(&self, path: &Path, content: &str) -> Result<(), VaultError> {
+        let resolved_file_path = self.resolve_path_from_vault_root(path)?;
+        // TODO: create not existing directories
+        tokio::fs::write(&resolved_file_path, content)
+            .await
+            .map_err(VaultError::io)?;
+
+        Ok(())
     }
 
     fn resolve_path_from_vault_root(&self, path: &Path) -> Result<PathBuf, VaultError> {
