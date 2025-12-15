@@ -1,15 +1,15 @@
-use std::borrow::Cow;
-use crate::vault::vault::{Vault};
+use crate::vault::vault::Vault;
+use rmcp::schemars::JsonSchema;
 use rmcp::{
-    ErrorData as McpError, RoleServer, ServerHandler,
+    ErrorData as McpError, Json, RoleServer, ServerHandler,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::*,
     schemars,
     service::RequestContext,
     tool, tool_handler, tool_router,
 };
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use serde_json::Value;
 use tracing::instrument;
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -34,15 +34,44 @@ pub struct ModifyNoteRequest {
     pub content: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct NoteReadResponse {
+    pub path: String,
+    pub content: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct NoteWriteResponse {
+    pub path: String,
+    pub status: &'static str,
+}
+
+impl NoteWriteResponse {
+    const WRITE_SUCCESS_MSG: &str = "Note written successfully";
+    const UPDATE_SUCCESS_MSG: &str = "Note modified successfully";
+
+    pub fn write_success(path: String) -> Self {
+        NoteWriteResponse {
+            path,
+            status: Self::WRITE_SUCCESS_MSG,
+        }
+    }
+
+    pub fn update_success(path: String) -> Self {
+        NoteWriteResponse {
+            path,
+            status: Self::UPDATE_SUCCESS_MSG,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct ObsidianMCP {
     tool_router: ToolRouter<ObsidianMCP>,
     vault_operations: Arc<Vault>,
 }
 
-pub struct ToolError {
-
-}
+pub struct ToolError {}
 
 impl ToolError {
     pub fn path_not_found() -> McpError {
@@ -52,7 +81,6 @@ impl ToolError {
 
 #[tool_router]
 impl ObsidianMCP {
-
     pub fn new(vault_operations: Arc<Vault>) -> Self {
         Self {
             tool_router: Self::tool_router(),
@@ -65,15 +93,15 @@ impl ObsidianMCP {
     async fn read_note(
         &self,
         Parameters(ReadNoteRequest { path }): Parameters<ReadNoteRequest>,
-    ) -> Result<CallToolResult, McpError> {
+    ) -> Result<Json<NoteReadResponse>, McpError> {
         if path.is_empty() {
             return Err(ToolError::path_not_found());
         }
 
-        match self.vault_operations.read_note(&path).await {
-            Ok(content) => return Ok(CallToolResult::success(vec![Content::text(content)])),
-            Err(err) => return Err(McpError::internal_error(err.to_string(), None)),
-        }
+        return match self.vault_operations.read_note(&path).await {
+            Ok(content) => Ok(Json(NoteReadResponse { path, content })),
+            Err(err) => Err(McpError::internal_error(err.to_string(), None)),
+        };
     }
 
     #[tool(description = "Write a note to the current vault")]
@@ -81,15 +109,15 @@ impl ObsidianMCP {
     async fn write_note(
         &self,
         Parameters(WriteNoteRequest { path, content }): Parameters<WriteNoteRequest>,
-    ) -> Result<CallToolResult, McpError> {
+    ) -> Result<Json<NoteWriteResponse>, McpError> {
         if path.is_empty() {
             return Err(ToolError::path_not_found());
         }
 
-        match self.vault_operations.write_note(&path, &content).await {
-            Ok(_) => return Ok(CallToolResult::success(vec![Content::text("Note written successfully")])),
-            Err(err) => return Err(McpError::internal_error(err.to_string(), None)),
-        }
+        return match self.vault_operations.write_note(&path, &content).await {
+            Ok(_) => Ok(Json(NoteWriteResponse::write_success(path))),
+            Err(err) => Err(McpError::internal_error(err.to_string(), None)),
+        };
     }
 
     #[tool(description = "Modify a note in the current vault")]
@@ -97,15 +125,15 @@ impl ObsidianMCP {
     async fn modify_note(
         &self,
         Parameters(ModifyNoteRequest { path, content }): Parameters<ModifyNoteRequest>,
-    ) -> Result<CallToolResult, McpError> {
+    ) -> Result<Json<NoteWriteResponse>, McpError> {
         if path.is_empty() {
             return Err(ToolError::path_not_found());
         }
 
-        match self.vault_operations.modify_note(&path, &content).await {
-            Ok(_) => return Ok(CallToolResult::success(vec![Content::text("Note modified successfully")])),
-            Err(err) => return Err(McpError::internal_error(err.to_string(), None)),
-        }
+        return match self.vault_operations.modify_note(&path, &content).await {
+            Ok(_) => Ok(Json(NoteWriteResponse::update_success(path))),
+            Err(err) => Err(McpError::internal_error(err.to_string(), None)),
+        };
     }
 }
 
